@@ -333,7 +333,7 @@ final class AutoEngine {
         AutoRules.Car car = toCar(carJson, cfg);
 
         if (car != null && !car.online) {
-            return asleep(pref, solar, car, memory, now);
+            return wakeAndApply(pref, solar, car, memory, cfg, now, realStart, force);
         }
 
         AutoRules.Decision decision = AutoRules.decide(pref, solar, car, memory, force);
@@ -343,18 +343,29 @@ final class AutoEngine {
         }
 
         try {
-            return executeDecision(decision, car, carJson, memory, now, "");
+            return executeDecision(decision, car, carJson, memory, now, realStart, "");
         } catch (Exception e) {
             this.st.putBoolean("force_read", true);
             String msg = e.getMessage() == null ? "" : e.getMessage();
-            if (msg.contains("dorme")) {
+            if (isAsleepError(msg)) {
                 if (carJson == null) {
                     carJson = new JSONObject();
                 }
                 carJson.put("online", false).put("charging", false);
                 this.st.putString("car", carJson.toString());
-                if ("start".equals(decision.action)) {
-                    return asleep(pref, solar, car, memory, now);
+                if ("stop".equals(decision.action)) {
+                    memory.startedByAuto = false;
+                    memory.reset();
+                    saveMemory(memory);
+                    String stoppedMsg = "La Tesla si è già fermata e addormentata";
+                    log(now, stoppedMsg, "info");
+                    return stoppedMsg;
+                }
+                if ("start".equals(decision.action) || "amps".equals(decision.action)) {
+                    car.online = false;
+                    car.charging = false;
+                    memory.startCount = AutoRules.START_CYCLES;
+                    return wakeAndApply(pref, solar, car, memory, cfg, now, realStart, force);
                 }
             }
             String errMsg = "Comando non riuscito: " + msg;
@@ -363,41 +374,102 @@ final class AutoEngine {
         }
     }
 
-    private String asleep(String pref, AutoRules.Solar solar, AutoRules.Car car, AutoRules.Memory memory, long now) throws Exception {
-        boolean knownState = this.st.getString("car", "").contains("\"plugged\"");
-        AutoRules.Decision dec = AutoRules.decideAsleep(pref, solar, car, memory, knownState);
+    private String wakeAndApply(
+            String pref,
+            AutoRules.Solar solar,
+            AutoRules.Car sleepingCar,
+            AutoRules.Memory memory,
+            JSONObject cfg,
+            long now,
+            long realStart,
+            boolean force
+    ) throws Exception {
+        String rawCar = this.st.getString("car", "");
+        boolean hasKnownFields = rawCar.contains("\"plugged\"");
+        long lastAwakeRead = this.st.getLong("last_awake_read", 0L);
+
+        boolean knownPositive = hasKnownFields
+                && sleepingCar != null
+                && sleepingCar.plugged
+                && !Boolean.FALSE.equals(sleepingCar.atHome)
+                && !(sleepingCar.limit > 0 && sleepingCar.soc >= sleepingCar.limit)
+                && (now - lastAwakeRead < POSITIVE_STATE_TTL_MS);
+
+        boolean knownNegative = !force
+                && hasKnownFields
+                && lastAwakeRead > 0L
+                && (now - lastAwakeRead < NEGATIVE_STATE_TTL_MS);
+
+        AutoRules.Decision wakeDec = AutoRules.decideAsleep(
+                pref, solar, sleepingCar, memory, knownPositive, knownNegative, force
+        );
         saveMemory(memory);
-        if (!"wake".equals(dec.action)) {
-            return dec.text;
+        if (!"wake".equals(wakeDec.action)) {
+            return wakeDec.text;
         }
-        String today = new SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(new Date(now));
-        int wakes = today.equals(this.st.getString("wake_day", "")) ? this.st.getInt("wakes", 0) : 0;
-        if (wakes >= 3) {
-            return "Tesla addormentata: risvegli di oggi finiti (3)";
+
+        String todayKey = new SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(new Date(now));
+        int wakesToday = todayKey.equals(this.st.getString("wake_day", "")) ? this.st.getInt("wakes", 0) : 0;
+        if (!force && wakesToday >= MAX_WAKES_PER_DAY) {
+            return "Tesla addormentata: risvegli di oggi finiti (" + MAX_WAKES_PER_DAY + ")";
         }
+
         long lastWake = this.st.getLong("last_wake", 0L);
-        if (now - lastWake < (car != null && car.plugged ? 30 * MIN : 2 * 60 * MIN)) {
+        if (!force && (now - lastWake < WAKE_RETRY_COOLDOWN_MS)) {
             this.st.putBoolean("force_read", true);
             return "Tesla in risveglio, la rileggo al prossimo controllo";
         }
-        this.st.putString("wake_day", today);
-        this.st.putInt("wakes", wakes + 1);
+
+        int newWakes = wakesToday + 1;
+        this.st.putString("wake_day", todayKey);
+        this.st.putInt("wakes", newWakes);
         this.st.putLong("last_wake", now);
-        this.st.putBoolean("force_read", true);
-        this.api.wake();
-        String msg = dec.text + " · in risveglio (" + (wakes + 1) + "/3 oggi)";
-        log(now, msg, "act");
-        return msg;
+
+        JSONObject awakeJson = this.api.wakeAndRead(WAKE_WAIT_TIMEOUT_MS);
+        if (awakeJson == null || !awakeJson.optBoolean("online")) {
+            this.st.putBoolean("force_read", true);
+            memory.startCount = AutoRules.START_CYCLES;
+            saveMemory(memory);
+            String pendingMsg = wakeDec.text + " · in risveglio (" + newWakes + "/" + MAX_WAKES_PER_DAY + " oggi)";
+            log(now, pendingMsg, "act");
+            return pendingMsg;
+        }
+
+        long awakeAt = now + Math.max(0L, System.currentTimeMillis() - realStart);
+        this.st.putLong("last_read", awakeAt);
+        this.st.putLong("last_awake_read", awakeAt);
+        this.st.putBoolean("force_read", false);
+        this.st.putString("car", awakeJson.toString());
+
+        AutoRules.Car awakeCar = toCar(awakeJson, cfg);
+        AutoRules.Decision actDec = AutoRules.decide(pref, solar, awakeCar, memory, true);
+        saveMemory(memory);
+
+        if ("none".equals(actDec.action)) {
+            String infoMsg = "Tesla svegliata (" + newWakes + "/" + MAX_WAKES_PER_DAY + " oggi): " + actDec.text;
+            log(now, infoMsg, "info");
+            return infoMsg;
+        }
+
+        try {
+            return executeDecision(
+                    actDec,
+                    awakeCar,
+                    awakeJson,
+                    memory,
+                    now,
+                    realStart,
+                    "Tesla svegliata (" + newWakes + "/" + MAX_WAKES_PER_DAY + " oggi) · "
+            );
+        } catch (Exception e) {
+            this.st.putBoolean("force_read", true);
+            String errMsg = "Tesla svegliata, ma comando non riuscito: " + (e.getMessage() == null ? "" : e.getMessage());
+            log(now, errMsg, "warn");
+            return errMsg;
+        }
     }
 
     private String executeDecision(
-            AutoRules.Decision decision,
-            AutoRules.Car car,
-            JSONObject carJson,
-            AutoRules.Memory memory,
-            long now,
-            String prefix
-    ) throws Exception {
             AutoRules.Decision decision,
             AutoRules.Car car,
             JSONObject carJson,
