@@ -445,8 +445,40 @@ final class Api {
         }
     }
 
+    /** Invia wake_up e attende che l'auto sia online, restituendo subito lo stato aggiornato. */
+    JSONObject wakeAndRead(long timeoutMs) throws Exception {
+        long start = System.currentTimeMillis();
+        long deadline = start + Math.max(10_000L, timeoutMs);
+        boolean alreadyOnline = wakeInternal(true);
+        boolean firstCheck = true;
+        boolean retriedWake = false;
+
+        while (System.currentTimeMillis() < deadline) {
+            long waitMs = firstCheck ? (alreadyOnline ? 1500L : 8000L) : 6000L;
+            firstCheck = false;
+            try {
+                Thread.sleep(waitMs);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+            JSONObject state = vehicleState();
+            if (state.optBoolean("online")) {
+                return state;
+            }
+            if (!retriedWake && System.currentTimeMillis() - start >= 24_000L && System.currentTimeMillis() + 6000L < deadline) {
+                retriedWake = true;
+                try {
+                    wakeInternal(false);
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        return new JSONObject().put("online", false);
+    }
+
     JSONObject command(String name, int value) throws Exception {
-        return command(name, value, false);
+        return command(name, value, true);
     }
 
     JSONObject command(String name, int value, boolean autoWake) throws Exception {

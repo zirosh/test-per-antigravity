@@ -358,7 +358,8 @@ async function command(btn, name, value, okText) {
   const all = document.querySelectorAll("#controls button");
   all.forEach((b) => (b.disabled = true));
   const label = btn.textContent;
-  btn.textContent = "Invio…";
+  const sleeping = !state.car || !state.car.online;
+  btn.textContent = sleeping ? "Sveglio e invio…" : "Invio…";
   try {
     const r = await native("tesla.command", { name, value });
     state.lastCmdAt = Date.now();
@@ -377,9 +378,19 @@ $("#limit").addEventListener("input", (e) => ($("#limit-val").textContent = `${e
 $("#btn-read").addEventListener("click", () => readCar());
 $("#btn-wake").addEventListener("click", async (e) => {
   const b = e.currentTarget; b.disabled = true;
-  try { await native("tesla.wake"); toast("Sveglia inviata: tra 20-30 secondi leggo lo stato"); setTimeout(() => readCar(true), 25000); }
-  catch (err) { toast(err.message); }
-  finally { b.disabled = false; loadCosts(); }
+  const label = b.textContent; b.textContent = "Sveglio…";
+  try {
+    toast("Sveglio la Tesla (20–30 secondi)…");
+    const c = await native("tesla.wakeAndRead");
+    state.car = c; state.carAt = Date.now(); state.carError = null;
+    if (c && c.online) {
+      if (c.request_amps) state.amps = c.request_amps;
+      if (c.limit) { $("#limit").value = c.limit; $("#limit-val").textContent = `${c.limit}%`; }
+      toast("Tesla sveglia");
+    } else toast("Sveglia inviata: riprova a leggere lo stato tra poco");
+    computePlan(); render();
+  } catch (err) { toast(err.message); }
+  finally { b.textContent = label; b.disabled = false; loadCosts(); }
 });
 $("#refresh").addEventListener("click", async (e) => {
   const b = e.currentTarget; b.classList.add("spin"); b.disabled = true;
@@ -415,13 +426,15 @@ async function applyPrefNow() {
   const cfg = state.cfg || {};
   if (!(cfg.tesla_ready && cfg.logged_in)) return;
   if (state.auto && state.auto.enabled) {
-    optMsg(`Applico "${PREFS[currentPref()].label}"…`);
+    const startedAt = Date.now();
+    const sleeping = state.car && !state.car.online;
+    optMsg(`Applico "${PREFS[currentPref()].label}"${sleeping ? " (sveglio la Tesla, ~25 s)" : ""}…`);
     try { await native("auto.runNow", { force: true }); } catch (e) { optMsg(e.message, "warn"); return; }
-    for (const wait of [4000, 6000, 8000]) {
+    for (const wait of [3000, 4000, 5000, 6000, 6000, 6000, 6000, 6000, 6000]) {
       await new Promise((r) => setTimeout(r, wait));
       await loadAuto();
       const a = state.auto || {};
-      if (a.last_at && Date.now() - a.last_at < 30000) { optMsg(a.last_text, "ok"); readCar(true); return; }
+      if (a.last_at && a.last_at >= startedAt - 1000) { optMsg(a.last_text, "ok"); readCar(true); return; }
     }
     optMsg("Il controllo è partito: il risultato lo trovi in \"Cosa ha fatto\".");
   } else optimize();
@@ -482,13 +495,9 @@ async function optimize() {
   const label = btn.textContent; btn.textContent = "Leggo inverter e Tesla…";
   try {
     await Promise.all([readSolar(), readCar(true)]);
-    const car = state.car, solar = state.solar;
+    let car = state.car;
+    const solar = state.solar;
     if (state.carError) return optMsg(state.carError, "warn");
-    if (!car || !car.online) return optMsg("La Tesla dorme: tocca \"Sveglia l'auto\" e riprova tra mezzo minuto.", "warn");
-    if (!car.plugged) return optMsg("La Tesla non è collegata al cavo.", "warn");
-    if (carAtHome() === false) return optMsg("La Tesla non è a casa: non tocco una carica fatta altrove.", "warn");
-    if (car.limit && car.soc >= car.limit) return optMsg(`La Tesla è già ${al(car.soc)}, al suo limite: niente da fare.`, "ok");
-    const maxA = car.max_amps || cfg.max_amps || 16;
     const homeFirst = pref === "casa" && solar && solar.home_soc < TAPER_SOC;   // decide la batteria, non serve il dato fresco
     if (pref !== "max" && !homeFirst) {
       if (!solar) return optMsg(state.solarError || "Dati dell'inverter non disponibili.", "warn");
@@ -499,6 +508,29 @@ async function optimize() {
         return optMsg(`L'inverter non ha ancora visto l'ultima modifica alla carica. Riprova dopo le ${hhmm(next)}, quando SolaX aggiorna i dati.`, "warn");
       }
     }
+    if (!car || !car.online) {
+      if (homeFirst) {
+        return optMsg(`Casa prima: la batteria di casa è ${al(solar.home_soc)}, la Tesla dorme e aspetta il 95%.` +
+          (state.auto && state.auto.enabled ? " Si sveglierà da sola quando la batteria arriverà al 95%." : " Accendi l'automatico se vuoi che si svegli e parta da sola al 95%."), "ok");
+      }
+      if (pref !== "max") {
+        const pre = planCharge(pref, solar, { charging: false, amps: 0, power_w: 0 }, cfg.max_amps || 16);
+        if (pre.amps === 0) {
+          const free = Math.max(0, pre.availW);
+          return optMsg(`Sole libero per la Tesla: circa ${fmtW(free)}. Ne servono almeno ${fmtW(MIN_A * VOLTS)} (${MIN_A} A): lascio dormire la Tesla.`, "warn");
+        }
+      }
+      btn.textContent = "Sveglio la Tesla…";
+      optMsg("La Tesla dorme: la sveglio automaticamente per avviare la carica (20–30 secondi)…");
+      car = await native("tesla.wakeAndRead");
+      state.car = car; state.carAt = Date.now();
+      computePlan(); render();
+      if (!car || !car.online) return optMsg("La Tesla non si è ancora svegliata: riprova tra qualche secondo.", "warn");
+    }
+    if (!car.plugged) return optMsg("La Tesla non è collegata al cavo.", "warn");
+    if (carAtHome() === false) return optMsg("La Tesla non è a casa: non tocco una carica fatta altrove.", "warn");
+    if (car.limit && car.soc >= car.limit) return optMsg(`La Tesla è già ${al(car.soc)}, al suo limite: niente da fare.`, "ok");
+    const maxA = car.max_amps || cfg.max_amps || 16;
     const p = planCharge(pref, solar, car, maxA);
     btn.textContent = "Invio i comandi…";
     const done = [];

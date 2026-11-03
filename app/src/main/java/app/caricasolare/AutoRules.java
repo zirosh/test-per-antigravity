@@ -267,25 +267,40 @@ final class AutoRules {
     }
 
     static Decision decideAsleep(String pref, Solar solar, Car car, Memory memory, boolean knownState) {
-        if (car != null && knownState && Boolean.FALSE.equals(car.atHome)) {
+        return decideAsleep(pref, solar, car, memory, knownState, knownState, false);
+    }
+
+    static Decision decideAsleep(
+            String pref,
+            Solar solar,
+            Car car,
+            Memory memory,
+            boolean knownPositive,
+            boolean knownNegative,
+            boolean force
+    ) {
+        if (car != null && knownNegative && Boolean.FALSE.equals(car.atHome)) {
             memory.reset();
             return Decision.none("Tesla addormentata fuori casa");
         }
-        if (car != null && knownState && !car.plugged) {
+        if (car != null && knownNegative && !car.plugged) {
             memory.reset();
             return Decision.none("Tesla addormentata e non collegata");
         }
-        if (car != null && knownState && car.limit > 0 && car.soc >= car.limit) {
+        if (car != null && knownNegative && car.limit > 0 && car.soc >= car.limit) {
             memory.reset();
             return Decision.none("Tesla addormentata, già al limite");
         }
+
         if ("max".equals(pref)) {
-            return Decision.none("Tesla addormentata");
+            return new Decision("wake", 0, "Sveglio la Tesla per caricare alla massima corrente");
         }
+
         if (solar.pv < DAY_PV_W) {
             memory.reset();
             return Decision.none("Tesla addormentata, niente sole");
         }
+
         if ("casa".equals(pref)) {
             updateHomeFull(solar, memory);
             if (!memory.homeFull) {
@@ -293,6 +308,7 @@ final class AutoRules {
                 return Decision.none("Tesla addormentata. Casa prima: aspetto la batteria di casa al 95% (ora " + Math.round(solar.soc) + "%)");
             }
         }
+
         double availW = available(pref, solar, 0.0d);
         if (leanToCar(pref, solar, memory)) {
             availW += RESERVE_W + LEAN_W;
@@ -301,11 +317,13 @@ final class AutoRules {
             memory.startCount = 0;
             return Decision.none("Tesla addormentata: sole libero " + kw(Math.max(0.0d, availW)) + ", ne servono " + kw(MIN_A * VOLTS) + " per svegliarla");
         }
-        memory.startCount++;
+
+        memory.startCount = force ? START_CYCLES : (memory.startCount + 1);
         if (memory.startCount < START_CYCLES) {
             return Decision.none("Tesla addormentata, sole libero " + kw(availW) + ": confermo al prossimo controllo");
         }
-        String text = knownState
+
+        String text = knownPositive
                 ? "Sveglio la Tesla per caricare col sole (" + kw(availW) + " liberi)"
                 : "Sveglio la Tesla per vedere se è collegata (" + kw(availW) + " di sole liberi)";
         return new Decision("wake", 0, text);
@@ -315,3 +333,4 @@ final class AutoRules {
         return s.isEmpty() ? s : Character.toUpperCase(s.charAt(0)) + s.substring(1);
     }
 }
+
