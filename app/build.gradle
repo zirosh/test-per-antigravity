@@ -1,0 +1,58 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'app.caricasolare'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "app.caricasolare"
+        minSdk 26
+        targetSdk 35
+        versionCode 13
+        versionName "1.12"
+    }
+
+    signingConfigs {
+        release {
+            def ks = rootProject.file("caricasolare.jks")
+            if (ks.exists()) {
+                storeFile ks
+                storePassword "caricasolare"
+                keyAlias "caricasolare"
+                keyPassword "caricasolare"
+                v1SigningEnabled true
+                v2SigningEnabled true
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (rootProject.file("caricasolare.jks").exists()) {
+                signingConfig signingConfigs.release
+            }
+        }
+        debug {
+            if (rootProject.file("caricasolare.jks").exists()) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    testOptions {
+        unitTests.returnDefaultValues = true
+    }
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20240303'
+}

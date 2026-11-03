@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Carica solare</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ================================================================ HOME -->
+<main id="view-home" class="view">
+  <header class="top">
+    <div>
+      <h1 id="title">Casa</h1>
+      <p class="status"><span class="chip" id="chip">Avvio…</span><span id="updated"></span></p>
+    </div>
+    <button class="icon-btn" id="refresh" type="button" aria-label="Aggiorna inverter e Tesla">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4"/></svg>
+    </button>
+  </header>
+  <div class="banner" id="banner" hidden></div>
+
+  <!-- Adesso: flussi di energia -->
+  <section class="card flow-card" aria-label="Flussi di energia in questo momento">
+    <div class="flow">
+      <svg class="flow-lines" id="flow-svg" viewBox="0 0 400 520" aria-hidden="true"></svg>
+      <span class="node-label" style="left:50%; top:2.6%">Sole</span>
+      <div class="node sun" style="left:50%; top:16.2%">
+        <svg class="ico" viewBox="0 0 32 32" aria-hidden="true"><path d="M4 22 7 13h13l-3 9z M10.5 13 9 22 M15.5 13 14 22 M5.5 17.5h13"/><path d="M23 9.5a3.2 3.2 0 1 1 .01 0z M23 3v1.6 M28.6 6.4l-1.2.9 M29.5 12.4h-1.6 M17.8 6.4l1.2.9"/></svg>
+        <b id="v-sun">—</b><small id="u-sun"></small>
+      </div>
+      <span class="node-label" style="left:16.5%; top:36.6%">Batteria</span>
+      <div class="node battery" style="left:16.5%; top:50.4%">
+        <span class="pill" id="p-battery"><i class="cell"></i><span>—</span></span>
+        <b id="v-battery">—</b><small id="u-battery"></small>
+      </div>
+      <span class="node-label" style="left:83.5%; top:36.6%">Rete</span>
+      <div class="node grid" style="left:83.5%; top:50.4%">
+        <svg class="ico" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3 10 29 M16 3l6 26 M12 12h8 M10.5 19h11 M7 12h18 M12.5 19 21 26 M19.5 19 11 26"/></svg>
+        <b id="v-grid">—</b><small id="u-grid"></small>
+      </div>
+      <div class="node house" style="left:30%; top:84.6%">
+        <svg class="ico" viewBox="0 0 32 32" aria-hidden="true"><path d="M6 13.5 16 5l10 8.5V27H6z"/><path d="m17 13-4 6h5l-3 5"/></svg>
+        <b id="v-house">—</b><small id="u-house"></small>
+      </div>
+      <span class="node-label" style="left:30%; top:98.4%">Casa</span>
+      <div class="node car" style="left:70%; top:84.6%">
+        <span class="pill" id="p-car"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 15.5v-3l2.2-4.3A2 2 0 0 1 7.5 7h9a2 2 0 0 1 1.8 1.2l2.2 4.3v3z M3.5 15.5V18h3v-2.5 M17.5 15.5V18h3v-2.5 M7 12.5h.01 M17 12.5h.01"/></svg><span>—</span></span>
+        <b id="v-car">—</b><small id="u-car"></small>
+      </div>
+      <span class="node-label" style="left:70%; top:98.4%">Tesla</span>
+    </div>
+    <p class="headline" id="headline"></p>
+  </section>
+
+  <!-- Le due batterie -->
+  <section class="tiles2" aria-label="Carica delle batterie">
+    <article class="bt car" id="cc-car">
+      <div class="bt-head"><span>Tesla</span><span class="bt-state" id="cc-car-state"></span></div>
+      <div class="bt-soc"><b id="cc-car-soc">—</b><span id="cc-car-target"></span></div>
+      <div class="cc-bar" id="cc-car-bar" role="img"><i class="plan"></i><i class="now"></i><i class="tick"></i></div>
+      <p class="cc-eta" id="cc-car-eta"></p>
+      <p class="cc-note" id="cc-car-note"></p>
+    </article>
+    <article class="bt home" id="cc-home">
+      <div class="bt-head"><span>Casa</span><span class="bt-state" id="cc-home-state"></span></div>
+      <div class="bt-soc"><b id="cc-home-soc">—</b><span>batteria</span></div>
+      <div class="cc-bar home" id="cc-home-bar" role="img"><i class="plan"></i><i class="now"></i><i class="tick"></i></div>
+      <p class="cc-eta" id="cc-home-eta"></p>
+      <p class="cc-note" id="cc-home-note"></p>
+    </article>
+  </section>
+
+  <!-- Come caricare -->
+  <section class="card optimize" id="optimize" aria-label="Come caricare">
+    <div class="row-head"><span class="row-title">Come caricare</span></div>
+    <div class="modes" role="radiogroup" aria-label="Preferenza di carica" id="prefs">
+      <button type="button" role="radio" data-pref="casa">Casa prima</button>
+      <button type="button" role="radio" data-pref="equilibrio">Bilanciata</button>
+      <button type="button" role="radio" data-pref="auto">Auto prima</button>
+      <button type="button" role="radio" data-pref="max">Massima</button>
+    </div>
+    <p class="pref-help" id="pref-help"></p>
+    <div class="opt-actions">
+      <button class="btn opt" type="button" id="btn-opt">Ottimizza ora</button>
+      <button class="btn" type="button" id="q-charge"><span id="q-charge-label">Avvia</span></button>
+    </div>
+    <p class="opt-msg" id="opt-msg" hidden></p>
+    <label class="auto-row">
+      <span><b>Automatico ogni 5 minuti</b><small id="auto-sub">Spento: ottimizzi tu quando vuoi</small></span>
+      <input type="checkbox" role="switch" id="auto-switch">
+    </label>
+    <div class="auto-box" id="auto-box" hidden>
+      <p class="auto-last" id="auto-last"></p>
+      <div class="auto-warn" id="auto-warn" hidden>
+        <p>Per funzionare a schermo spento, Android non deve mettere in pausa l'app: <b>Batteria → Senza restrizioni</b>.</p>
+        <button class="btn small" type="button" id="auto-battery">Sistema adesso</button>
+      </div>
+      <details class="auto-log"><summary>Cosa ha fatto</summary><ul id="auto-log"></ul></details>
+    </div>
+  </section>
+
+  <section class="card eta-card" id="eta-card" aria-label="Quando saranno cariche">
+    <div class="row-head"><span class="row-title">Quando saranno cariche</span><span class="row-meta" id="eta-sub"></span></div>
+    <div class="eta-rows" id="eta-rows"></div>
+    <div class="eta-chart" id="eta-chart"></div>
+    <div class="eta-legend" id="eta-legend" hidden>
+      <span><i class="k home"></i>Batteria di casa</span><span><i class="k car"></i>Tesla</span><span><i class="k sun"></i>Sole previsto</span>
+    </div>
+    <p class="fine" id="eta-note"></p>
+  </section>
+
+  <section class="card forecast" id="forecast" aria-label="Sole previsto e consigli">
+    <div class="row-head"><span class="row-title">Sole previsto</span><span class="row-meta" id="fc-sum"></span></div>
+    <div class="fc-empty" id="fc-empty" hidden>
+      <p id="fc-empty-text">Per le previsioni serve la posizione di casa.</p>
+      <a class="btn small" href="#settings-forecast">Imposta la posizione</a>
+    </div>
+    <div class="fc-chart" id="fc-chart"></div>
+    <div class="advice" id="advice"></div>
+    <details class="fc-table"><summary>Valori ora per ora</summary><div class="table-wrap" id="fc-table"></div></details>
+    <p class="fine" id="fc-note"></p>
+  </section>
+
+  <!-- Storico e risparmio -->
+  <section class="card history" id="history" aria-label="Storico e risparmio">
+    <div class="row-head"><span class="row-title">Tesla dal sole</span>
+      <div class="seg" role="radiogroup" aria-label="Periodo" id="hist-range">
+        <button type="button" role="radio" data-range="week" aria-checked="true">7 giorni</button>
+        <button type="button" role="radio" data-range="month" aria-checked="false">Mese</button>
+      </div>
+    </div>
+    <div class="hist-tiles">
+      <div><span>Dal sole</span><b id="h-sun">—</b></div>
+      <div><span>Risparmio</span><b id="h-save">—</b></div>
+      <div><span>Dalla rete</span><b id="h-grid">—</b></div>
+    </div>
+    <div class="hist-chart" id="hist-chart"></div>
+    <div class="eta-legend" id="hist-legend"><span><i class="k hsun"></i>Tesla dal sole</span><span><i class="k hgrid"></i>Tesla dalla rete</span></div>
+    <p class="fine" id="hist-note"></p>
+  </section>
+
+  <!-- Comandi manuali -->
+  <details class="card manual" id="manual">
+    <summary>Comandi manuali</summary>
+    <div class="controls" id="controls">
+    <div>
+      <div class="ctl-row"><span>Limite di carica</span><b id="limit-val">80%</b></div>
+      <input type="range" id="limit" min="50" max="100" step="5" value="80" aria-label="Limite di carica">
+      <div class="ctl-row fine-row"><span class="muted" id="limit-now"></span><button class="btn small" type="button" id="btn-limit">Imposta limite</button></div>
+    </div>
+    <div>
+      <div class="ctl-row"><span>Corrente di carica</span><span class="muted" id="amps-now"></span></div>
+      <div class="set-row">
+        <div class="stepper">
+          <button type="button" id="amps-minus" aria-label="Meno">−</button>
+          <output id="amps-out">10<small>A</small></output>
+          <button type="button" id="amps-plus" aria-label="Più">+</button>
+        </div>
+        <button class="btn small" type="button" id="btn-amps">Imposta</button>
+      </div>
+      <p class="fine" id="amps-kw"></p>
+    </div>
+    <div class="big-btns">
+      <button class="btn go" type="button" id="btn-start">Avvia ricarica</button>
+      <button class="btn stop" type="button" id="btn-stop">Interrompi</button>
+    </div>
+    <div class="sub-actions">
+      <button class="btn small" type="button" id="btn-read">Leggi stato Tesla</button>
+      <button class="btn small" type="button" id="btn-wake">Sveglia l'auto</button>
+    </div>
+    <p class="fine" id="tesla-note"></p>
+    </div>
+  </details>
+
+  <p class="fine center" id="costs"></p>
+</main>
+
+<!-- ================================================================ IMPOSTAZIONI -->
+<main id="view-settings" class="view" hidden>
+  <header class="top"><h1>Impostazioni</h1></header>
+
+  <fieldset class="card">
+    <legend>Inverter SolaX</legend>
+    <label class="field"><span>Token</span><span class="input"><input type="text" id="f-solax-token" autocapitalize="off" spellcheck="false"></span></label>
+    <label class="field"><span>Numero di serie (Registration No.)</span><span class="input"><input type="text" id="f-solax-sn" autocapitalize="characters" spellcheck="false"></span></label>
+    <label class="field"><span>Nome della casa</span><span class="input"><input type="text" id="f-title" maxlength="40"></span></label>
+    <label class="field"><span>Capacità batteria di casa</span><span class="input"><input type="number" inputmode="decimal" step="0.1" id="f-home-kwh"><i>kWh</i></span><small>Per l'orario di batteria piena.</small></label>
+    <label class="field"><span>Carica massima della batteria di casa</span><span class="input"><input type="number" inputmode="decimal" step="0.1" id="f-bat-max"><i>kW</i></span><small>Con "Casa prima" e "Bilanciata" la Tesla lascia alla batteria almeno questa potenza. La trovi nella scheda della batteria o nell'app SolaX; se ne vedo di più, uso quella.</small></label>
+    <div class="pair">
+      <label class="field"><span>Prezzo della corrente</span><span class="input"><input type="number" inputmode="decimal" step="0.01" id="f-price"><i>€/kWh</i></span></label>
+      <label class="field"><span>Energia immessa pagata</span><span class="input"><input type="number" inputmode="decimal" step="0.01" id="f-feedin"><i>€/kWh</i></span></label>
+    </div>
+    <small class="muted">Per il risparmio: ogni kWh di sole nella Tesla vale il prezzo che paghi meno quanto ti avrebbero pagato immettendolo (0 se non ti pagano).</small>
+  </fieldset>
+
+  <fieldset class="card" id="settings-forecast">
+    <legend>Previsioni del sole</legend>
+    <label class="field"><span>Posizione di casa</span><span class="input"><input type="text" id="f-home-pos" placeholder="45.7012, 12.8345" inputmode="decimal" autocomplete="off"></span>
+      <small>Latitudine e longitudine. Su Google Maps tieni premuto su casa tua e copia i numeri che compaiono.</small></label>
+    <button class="btn small" type="button" id="btn-car-pos">Usa la posizione attuale della Tesla</button>
+    <div class="pair">
+      <label class="field"><span>Inclinazione pannelli</span><span class="input"><input type="number" inputmode="numeric" id="f-tilt" min="0" max="90"><i>gradi</i></span></label>
+      <label class="field"><span>Orientamento</span><span class="input"><select id="f-az">
+        <option value="0">Sud</option><option value="-45">Sud-est</option><option value="45">Sud-ovest</option>
+        <option value="-90">Est</option><option value="90">Ovest</option></select></span></label>
+    </div>
+    <small class="muted">La resa dell'impianto la ricavo da sola confrontando la produzione con il meteo: dopo qualche giorno di uso le previsioni diventano precise.</small>
+  </fieldset>
+
+  <section class="card wizard" id="wizard">
+    <div class="card-head"><h3>Collega la Tesla da qui</h3><span class="chip" id="wz-chip"></span></div>
+    <p class="muted">Sette passi, una volta sola. Serve l'account Tesla dell'auto con la verifica in due passaggi attiva. Puoi interrompere quando vuoi: i passi fatti restano.</p>
+    <ol class="steps">
+      <li><details id="wz1"><summary><i class="dot"></i>Crea la chiave dell'app</summary>
+        <div class="step-body">
+          <p class="muted">La chiave firma i comandi per l'auto e resta solo in questo telefono.</p>
+          <button class="btn primary" type="button" id="wz-key">Crea la chiave</button>
+          <p class="muted" id="wz-key-done" hidden>Chiave creata. Non va mai rigenerata: l'auto sarà legata a questa.</p>
+          <details class="danger"><summary class="muted">Crea una chiave nuova</summary>
+            <p class="muted">Solo se hai perso quella vecchia: dovrai ripubblicarla e riabbinarla all'auto.</p>
+            <button class="btn ghost" type="button" id="wz-key-new">Sostituisci la chiave</button>
+          </details>
+        </div></details></li>
+
+      <li><details id="wz2"><summary><i class="dot"></i>Pubblica la chiave su GitHub</summary>
+        <div class="step-body">
+          <p class="muted">Tesla vuole la chiave pubblica su un sito tuo: usiamo GitHub Pages, gratis. Se non hai un account, <a href="#" data-open="https://github.com/signup">crealo qui</a>.</p>
+          <label class="field"><span>Il tuo nome utente GitHub</span><span class="input"><input type="text" id="wz-gh" autocapitalize="off" autocomplete="off" spellcheck="false"></span></label>
+          <button class="btn" type="button" id="wz-gh-save">Salva nome utente</button>
+          <div id="wz-gh-steps" hidden>
+            <p><b>1.</b> Crea un repository pubblico con esattamente questo nome, poi "Create repository":</p>
+            <div class="copy"><code id="wz-repo"></code><button class="btn small" type="button" data-copy="#wz-repo">Copia</button></div>
+            <button class="btn small" type="button" data-open="https://github.com/new">Apri GitHub</button>
+            <p><b>2.</b> Nel repository: <i>Add file → Create new file</i>. Nome <code>.nojekyll</code>, contenuto vuoto, poi "Commit changes".</p>
+            <p><b>3.</b> Di nuovo <i>Add file → Create new file</i>. Come nome incolla questo (le barre creano le cartelle):</p>
+            <div class="copy"><code>.well-known/appspecific/com.tesla.3p.public-key.pem</code><button class="btn small" type="button" data-copy-text=".well-known/appspecific/com.tesla.3p.public-key.pem">Copia</button></div>
+            <p>Come contenuto incolla la chiave pubblica, poi "Commit changes":</p>
+            <pre class="copy-block" id="wz-pub"></pre>
+            <button class="btn small" type="button" data-copy="#wz-pub">Copia la chiave pubblica</button>
+            <p class="muted">Se GitHub da telefono non mostra "Add file", nel browser attiva "Sito desktop".</p>
+            <p><b>4.</b> Aspetta 1–2 minuti, poi:</p>
+            <button class="btn primary" type="button" id="wz-check">Verifica la pubblicazione</button>
+            <p class="muted" id="wz-check-msg"></p>
+          </div>
+        </div></details></li>
+
+      <li><details id="wz3"><summary><i class="dot"></i>Crea l'app su developer.tesla.com</summary>
+        <div class="step-body">
+          <button class="btn small" type="button" data-open="https://developer.tesla.com">Apri developer.tesla.com</button>
+          <p>Accedi e tocca <i>Create Application</i>. Compila così:</p>
+          <ul class="plain">
+            <li>Nome e descrizione: liberi, per esempio "Carica solare casa", uso personale.</li>
+            <li>OAuth Grant Type: <b>Authorization Code and Machine-to-Machine</b>.</li>
+            <li>Allowed Origin URL: <span class="copy inline"><code id="wz-origin"></code><button class="btn small" type="button" data-copy="#wz-origin">Copia</button></span></li>
+            <li>Allowed Redirect URI: <span class="copy inline"><code id="wz-redirect"></code><button class="btn small" type="button" data-copy="#wz-redirect">Copia</button></span></li>
+            <li>Allowed Returned URL: vuoto.</li>
+            <li>Scopes: Vehicle Information, Vehicle Location, Vehicle Commands, Vehicle Charging Management.</li>
+            <li>Billing, se lo chiede: un metodo di pagamento. Tesla regala 10 $ al mese.</li>
+          </ul>
+          <p>Poi apri l'app → <i>View Details → Credentials &amp; APIs</i> e copia qui:</p>
+          <label class="field"><span>Client ID</span><span class="input"><input type="text" id="wz-cid" autocapitalize="off" autocomplete="off" spellcheck="false"></span></label>
+          <label class="field"><span>Client Secret</span><span class="input"><input type="password" id="wz-secret" autocapitalize="off" autocomplete="off"></span></label>
+          <button class="btn primary" type="button" id="wz-client">Salva</button>
+        </div></details></li>
+
+      <li><details id="wz4"><summary><i class="dot"></i>Registra il dominio presso Tesla</summary>
+        <div class="step-body">
+          <p class="muted">Tesla controlla che la chiave sul tuo sito sia quella dell'app.</p>
+          <button class="btn primary" type="button" id="wz-register">Registra</button>
+          <p class="muted" id="wz-register-msg"></p>
+        </div></details></li>
+
+      <li><details id="wz5"><summary><i class="dot"></i>Accedi all'account Tesla</summary>
+        <div class="step-body">
+          <p class="muted">Accedi con l'account dell'auto e accetta tutti i permessi.</p>
+          <button class="btn primary" type="button" id="wz-login">Accedi</button>
+        </div></details></li>
+
+      <li><details id="wz6"><summary><i class="dot"></i>Scegli l'auto</summary>
+        <div class="step-body">
+          <button class="btn primary" type="button" id="wz-cars">Trova la mia auto</button>
+          <div id="wz-car-list" class="sub-actions"></div>
+          <p class="muted" id="wz-car-msg"></p>
+        </div></details></li>
+
+      <li><details id="wz7"><summary><i class="dot"></i>Abbina la chiave all'auto</summary>
+        <div class="step-body">
+          <p><b>1.</b> Tocca il pulsante: si apre l'app Tesla e chiede di aggiungere la chiave. Conferma.</p>
+          <button class="btn" type="button" id="wz-pair">Apri l'abbinamento</button>
+          <p><b>2.</b> Se l'auto chiede conferma sullo schermo o con la key card, segui le indicazioni. In auto, in <i>Comandi → Blocchi</i>, deve comparire la nuova chiave.</p>
+          <p><b>3.</b> Poi:</p>
+          <button class="btn primary" type="button" id="wz-paired">Verifica l'abbinamento</button>
+          <p class="muted" id="wz-paired-msg"></p>
+        </div></details></li>
+    </ol>
+  </section>
+
+  <details class="card" id="code-card">
+    <summary>Hai già collegato la Tesla dal PC?</summary>
+    <p class="muted">Sul PC fai doppio clic su <b>collega-telefono.bat</b>: crea un codice con i dati di SolaX e Tesla. Mandalo a te stesso e incollalo qui, al posto dei passi sopra.</p>
+    <textarea id="code" placeholder="CS1:…" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+    <button class="btn primary" type="button" id="btn-import" style="margin-top: 10px">Importa codice</button>
+  </details>
+
+
+  <fieldset class="card">
+    <legend>Tesla</legend>
+    <div class="status-line"><i class="dot" id="st-cfg"></i><span id="st-cfg-text"></span></div>
+    <div class="status-line"><i class="dot" id="st-login"></i><span id="st-login-text"></span></div>
+    <button class="btn primary" type="button" id="btn-login">Accedi all'account Tesla</button>
+    <details>
+      <summary class="muted">Problemi con l'accesso dentro l'app?</summary>
+      <p class="muted">Apri l'accesso nel browser, poi incolla qui l'indirizzo della pagina finale (quella che può dire 404).</p>
+      <div class="sub-actions" style="margin: 8px 0"><button class="btn" type="button" id="btn-login-ext">Apri nel browser</button></div>
+      <span class="input"><input type="url" id="f-callback" placeholder="https://…/callback?code=…"></span>
+      <button class="btn" type="button" id="btn-callback" style="margin-top: 8px">Completa l'accesso</button>
+    </details>
+    <details>
+      <summary class="muted">Inserimento manuale</summary>
+      <label class="field"><span>Client ID</span><span class="input"><input type="text" id="f-client-id" autocapitalize="off" spellcheck="false"></span></label>
+      <label class="field"><span>Client Secret</span><span class="input"><input type="password" id="f-client-secret" autocapitalize="off"></span></label>
+      <label class="field"><span>Dominio</span><span class="input"><input type="text" id="f-domain" placeholder="tuoutente.github.io" autocapitalize="off"></span></label>
+      <label class="field"><span>VIN</span><span class="input"><input type="text" id="f-vin" autocapitalize="characters" spellcheck="false"></span></label>
+      <label class="field"><span>Chiave privata (private-key.pem)</span><textarea id="f-key" placeholder="-----BEGIN EC PRIVATE KEY-----" spellcheck="false"></textarea><small>La stessa chiave abbinata all'auto. Resta solo in questo telefono.</small></label>
+      <label class="field"><span>Corrente massima della wallbox</span><span class="input"><input type="number" inputmode="numeric" id="f-max-amps" min="5" max="32"><i>A</i></span></label>
+    </details>
+  </fieldset>
+
+  <button class="btn primary" type="button" id="btn-save">Salva</button>
+  <button class="btn ghost" type="button" id="btn-forget" style="margin-left: 8px">Cancella tutti i dati</button>
+  <p class="fine">Le chiavi e i token restano solo in questo telefono, nella memoria privata dell'app.</p>
+</main>
+
+<nav class="tabbar" aria-label="Sezioni">
+  <a href="#home" data-view="home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11 12 4l8 7v9H4z" class="fill"/><path d="M9.5 16.5h5"/></svg>Home</a>
+  <a href="#settings" data-view="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10 M18 7h2 M4 17h2 M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>Impostazioni</a>
+</nav>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<script src="planner.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
